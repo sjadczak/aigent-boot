@@ -14,7 +14,7 @@ def get_file_content(working_directory, file_path):
         return f'Error: File not found or is not a regular file: "{file_path}"'
 
     try:
-        with open(file_path, "rt") as f:
+        with open(fp, "rt") as f:
             content = f.read()
             if len(content) > FILE_LIMIT:
                 content = content[:FILE_LIMIT]
