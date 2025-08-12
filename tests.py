@@ -5,14 +5,28 @@ from functions.run_python_file import run_python_file
 
 
 def main():
-    # test_get_files_info()
+    test_get_files_info()
     # test_get_file_content()
     # test_write_file()
-    test_execute_python()
+    # test_execute_python()
 
 
 def test_get_files_info():
-    pass
+    print("Result for current directory:")
+    results = get_files_info("calculator", ".")
+    print(results)
+
+    print("Result for 'pkg' directory:")
+    results = get_files_info("calculator", "pkg")
+    print(results)
+
+    print("Result for '/bin' directory:")
+    results = get_files_info("calculator", "/bin")
+    print(results)
+
+    print("Result for '../' directory:")
+    results = get_files_info("calculator", "../")
+    print(results)
 
 def test_get_file_content():
     print("Result for 'lorem.txt':")

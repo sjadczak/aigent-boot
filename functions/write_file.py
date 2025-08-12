@@ -1,5 +1,26 @@
 from pathlib import Path
 
+from google.genai import types
+
+
+schema_write_file = types.FunctionDeclaration(
+    name="write_file",
+    description="Writes or overwrites files in the specified directory, constrained to the working directory.",
+    parameters = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The file path to write or overwrite the content to.",
+            ),
+            "content": types.Schema(
+                type=types.Type.STRING,
+                description="The content to write to the file."
+            ),
+        },
+    ),
+)
+
 
 def write_file(working_directory, file_path, content):
     wd = Path(working_directory).resolve()
