@@ -62,7 +62,7 @@ def generate_content(
             system_instruction=system_prompt,
         ),
     )
-    if verbose:
+    if verbose and response.usage_metadata:
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
 
