@@ -5,94 +5,56 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from functions.get_files_info import get_files_info, schema_get_files_info
-from functions.get_file_content import get_file_content, schema_get_file_content
-from functions.run_python_file import run_python_file, schema_run_python_file
-from functions.write_file import write_file, schema_write_file
+from prompts import system_prompt
+from call_function import call_function, available_functions
+from config import MAX_ITERS
 
-
-load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
-
-available_functions = types.Tool(
-    function_declarations=[
-        schema_get_files_info,
-        schema_get_file_content,
-        schema_run_python_file,
-        schema_write_file,
-    ]
-)
-
-fns = {
-    "get_files_info": get_files_info,
-    "get_file_content": get_file_content,
-    "run_python_file": run_python_file,
-    "write_file": write_file,
-}
-
-system_prompt = """
-You are a helpful AI coding agent.
-
-When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
-
- - List files and directories
- - Read file contents
- - Execute Python files with optional arguments
- - Write or overwrite files
-
-All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
-"""
-
-def call_function(fn_call, verbose=False):
-    if verbose:
-        print(f"Calling function: {fn_call.name}({fn_call.args})")
-    else:
-        print(f" - Calling function: {fn_call.name}")
-
-    fn_call.args["working_directory"] = "./calculator"
-    fn = fns.get(fn_call.name)
-    if not fn:
-        return types.Content(
-            role="tool",
-            parts=[
-                types.Part.from_function_response(
-                    name=fn_call.name,
-                    response={"error": f"Unknown function: {fn_call.name}"},
-                ),
-            ],
-        )
-    result = fn(**fn_call.args)
-    return types.Content(
-        role="tool",
-        parts=[
-            types.Part.from_function_response(
-                name=fn_call.name,
-                response={"result": result},
-            ),
-        ],
-    )
 
 def main():
-    if len(sys.argv) < 2:
-        print('Usage: python main.py "Why is the sky blue?" [--verbose]')
+    load_dotenv()
+
+    verbose = "--verbose" in sys.argv
+    args = []
+    for arg in sys.argv[1:]:
+        if not arg.startswith("--"):
+            args.append(arg)
+
+    if not args:
+        print("AI Code Assistant")
+        print('\nUsage: python main.py "your prompt here" [--verbose]')
+        print('Example: python main.py "How do I fix the calculator?"')
         sys.exit(1)
 
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
 
-    verbose = False
-    if len(sys.argv) == 3:
-        verbose = sys.argv[2].lower() == "--verbose"
-
-    user_prompt = sys.argv[1]
+    user_prompt = " ".join(args)
 
     messages = [
-        types.Content(
-            role="user",
-            parts=[types.Part(text=user_prompt)]
-        ),
+        types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
 
-    resp = client.models.generate_content(
+    iters = 0
+    while True:
+        iters += 1
+        if iters > MAX_ITERS:
+            print(f"Maximum iterations ({MAX_ITERS}) reached.")
+            sys.exit(1)
+
+        try:
+            final_response = generate_content(client, messages, verbose)
+            if final_response:
+                print("Final response:")
+                print(final_response)
+                break
+        except Exception as e:
+            print(f"Error in generate_content: {e}")
+
+
+def generate_content(
+    client: genai.Client, messages: list[types.Content], verbose: bool
+):
+    response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
         config=types.GenerateContentConfig(
@@ -100,25 +62,33 @@ def main():
             system_instruction=system_prompt,
         ),
     )
-
     if verbose:
-        print(f"User prompt: {user_prompt}")
+        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+        print("Response tokens:", response.usage_metadata.candidates_token_count)
 
-    if resp.function_calls:
-        for fc in resp.function_calls:
-            res = call_function(fc)
-            if rc := res.parts[0].function_response.response:
-                if verbose:
-                    print(f" -> {rc}")
-            else:
-                raise Exception(f"Unknown error calling {fc.name}")
+    if response.candidates:
+        for candidate in response.candidates:
+            function_call_content = candidate.content
+            if function_call_content:
+                messages.append(function_call_content)
 
+    if not response.function_calls:
+        return response.text
 
-    print(resp.text)
+    function_responses = []
+    for fn_call_part in response.function_calls:
+        fn_call_result = call_function(fn_call_part, verbose)
+        if not fn_call_result.parts or not fn_call_result.parts[0].function_response:
+            raise Exception("empty function call result")
 
-    if verbose:
-        print(f"Prompt tokens: {resp.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {resp.usage_metadata.candidates_token_count}")
+        if verbose:
+            print(f" -> {fn_call_result.parts[0].function_response.response}")
+        function_responses.append(fn_call_result.parts[0])
+
+    if not function_responses:
+        raise Exception("no function responses generated, exiting.")
+
+    messages.append(types.Content(role="user", parts=function_responses))
 
 
 if __name__ == "__main__":

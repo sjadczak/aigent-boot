@@ -2,13 +2,13 @@ from pathlib import Path
 
 from google.genai import types
 
-from config import FILE_LIMIT
+from config import MAX_CHARS
 
 
 schema_get_file_content = types.FunctionDeclaration(
     name="get_file_content",
     description="Read file contents in the specified directory, constrained to the working directory.",
-    parameters = types.Schema(
+    parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
             "file_path": types.Schema(
@@ -33,9 +33,9 @@ def get_file_content(working_directory, file_path):
     try:
         with open(fp, "rt") as f:
             content = f.read()
-            if len(content) > FILE_LIMIT:
-                content = content[:FILE_LIMIT]
-                content += f'[...File "{fp}" truncated at {FILE_LIMIT} characters]'
+            if len(content) > MAX_CHARS:
+                content = content[:MAX_CHARS]
+                content += f'[...File "{fp}" truncated at {MAX_CHARS} characters]'
         return content
     except Exception as e:
         return f"Error: could not read file: {e}"
